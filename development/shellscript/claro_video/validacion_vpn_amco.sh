@@ -1,5 +1,15 @@
 #!/bin/bash
 
+########################################################################################################
+##                           SHELLSCRIPT CONEXION VPN CLARO VIDEO                                     ##
+##                                                                                                    ##
+## Descripcion: ShellScript para levantamiento de VPN en servidor Claro Video                         ##
+## Autor: Alexis Abraham Araujo Moreno                                                                ##
+## OS: Linux                                                                                          ##
+## Fecha Ultima Actualizacion: 4/28/21                                                                ##
+##                                                                                                    ##
+########################################################################################################
+
 HOST=""
 PORT=""
 USER=""
@@ -8,6 +18,8 @@ TRUSTED_CERT=""
 
 RESULTADO_EJECUCION_PING=0
 INTENTOS_FALLIDOS_EN_LEVANTAR_VPN=0
+MENSAJE_FALLA_CONECTIVIDAD_CERT="Gateway certificate validation failed"
+CADENA_OBTENCION_CERT_REGEX="trusted-cert ="
 
 while true; do
 
@@ -36,20 +48,43 @@ while true; do
         # nuevamente a levantar la vpn
         DELETE_PIDS_OPENFORTIVPN=$(pkill openfortivpn)
 
-        eval "openfortivpn ${HOST}:${PORT} -u ${USER} -p ${PASS} --trusted-cert ${TRUSTED_CERT} --persistent 1 &"
+        # Se ejecuta el comando para levantar la VPN    
+        RESULT_OPENFORTIVPN=`openfortivpn "${HOST}":"${PORT}" -u "${USER}" -p "${PASS}" --trusted-cert ${TRUSTED_CERT} &`
+        
         sleep 5
+
+        # se obtiene el output ERROR del comando ejecutado y se verifica que contenga en el texto el certificado
+        CADENA_OUTPUT_OPENFORTIVPN=$(echo "$RESULT_OPENFORTIVPN" | grep "${MENSAJE_FALLA_CONECTIVIDAD_CERT}")
+        
+        # si en la cadena del output ERROR si se encontraron coincidencias se procede a retomar el certificado obtenido
+        # en la cadena, con el fin de ejecutar nuevamente el comando con el certificado obtenido
+        if [ ${#CADENA_OUTPUT_OPENFORTIVPN} -gt 0 ]
+        then
+            RESULT_CERT=$(echo "$RESULT_OPENFORTIVPN" | grep "${CADENA_OBTENCION_CERT_REGEX}")
+
+            while IFS= read -r LINEA; do
+                CERTIFICADO=$(grep -oP "[a-zA-Z0-9]{64}" <<< "$LINEA")
+            done <<< "${RESULT_CERT}"
+            
+            if [ ! -z "$CERTIFICADO" ] 
+            then
+                TRUSTED_CERT=$CERTIFICADO
+            fi
+        fi
     else
         break
     fi
-
+    
+    # despues de tres intentos fallidos para levantar la VPN, se envia correo con la informacion de la notificacion
+    # y se finaliza la ejecucion del script
     if [ $INTENTOS_FALLIDOS_EN_LEVANTAR_VPN -ge 3 ]
     then
-        HTML_BODY=$(</development/correo.html) 
+        HTML_BODY=$(<./correo.html) 
         FECHA_EJECUCION_SCRIPT=$(date)
         HTML_BODY=$(printf "${HTML_BODY}" "${FECHA_EJECUCION_SCRIPT}" "${INTENTOS_FALLIDOS_EN_LEVANTAR_VPN}")
         HTML_BODY=$(sed 's/"/\\"/g' <<< "${HTML_BODY}")
 
-        TO=""
+        TO="alexis.araujo@triara.com, jose.hernandez@triara.com, gerardo.trevino@triara.com"
         SUBJECT="Falla de conectividad a VPN Servidor AMCO Claro Video"
 
         curl -X POST -H 'Content-Type: application/json' -i http://itoc-tools.triara.mexico:8083/notifications/email/html\
