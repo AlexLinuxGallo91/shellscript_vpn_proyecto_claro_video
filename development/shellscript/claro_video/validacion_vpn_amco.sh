@@ -84,7 +84,7 @@ while true; do
         HTML_BODY=$(printf "${HTML_BODY}" "${FECHA_EJECUCION_SCRIPT}" "${INTENTOS_FALLIDOS_EN_LEVANTAR_VPN}")
         HTML_BODY=$(sed 's/"/\\"/g' <<< "${HTML_BODY}")
 
-        TO="alexis.araujo@triara.com, jose.hernandez@triara.com, gerardo.trevino@triara.com"
+        TO=""
         SUBJECT="Falla de conectividad a VPN Servidor AMCO Claro Video"
 
         curl -X POST -H 'Content-Type: application/json' -i http://itoc-tools.triara.mexico:8083/notifications/email/html\
